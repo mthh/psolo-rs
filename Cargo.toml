@@ -1,0 +1,9 @@
+[package]
+name = "psolo-rs"
+version = "0.1.0"
+authors = ["mthh <matthieu.viry@univ-grenoble-alpes.fr>"]
+edition = "2018"
+
+
+[dependencies]
+quicksilver = "0.4.0-alpha0.7"
