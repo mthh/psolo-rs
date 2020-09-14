@@ -79,78 +79,96 @@ impl ScreenBoard {
     }
 }
 
-async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver::Result<()> {
-    let mut screenboard: Option<ScreenBoard> = None;
-    let bg_color = Color::from_rgba(128, 128, 128, 1.);
-    let make_peg = |sb: &ScreenBoard,
-                    i: u32,
-                    j: u32,
-                    color_rect: Color,
-                    color_circle: Color,
-                    g: &mut Graphics| {
-        g.fill_rect(
-            &Rectangle::new(
-                Vector::new(
-                    sb.board_margin_left + i as f32 * sb.cell_with_margin,
-                    sb.board_margin_top + j as f32 * sb.cell_with_margin,
-                ),
-                Vector::new(sb.cell_size, sb.cell_size),
-            ),
-            color_rect,
-        );
-        g.fill_circle(
-            &Circle::new(
-                Vector::new(
-                    sb.board_margin_left
-                        + i as f32 * sb.cell_with_margin
-                        + sb.peg_size
-                        + sb.d_cell_peg_size,
-                    sb.board_margin_top
-                        + j as f32 * sb.cell_with_margin
-                        + sb.peg_size
-                        + sb.d_cell_peg_size,
-                ),
-                sb.peg_size,
-            ),
-            color_circle,
-        );
-    };
+fn is_in_rect(cursor_position: Vector, rect_positions: &[(f32, f32, f32, f32)]) -> bool {
+    for (left_rect, top_rect, width, height) in rect_positions {
+        if cursor_position.y >= *top_rect
+            && cursor_position.y <= top_rect + height
+            && cursor_position.x >= *left_rect
+            && cursor_position.x <= left_rect + width
+        {
+            return true;
+        }
+    }
+    false
+}
 
-    let make_hole = |sb: &ScreenBoard, i: u32, j: u32, g: &mut Graphics| {
-        g.fill_rect(
-            &Rectangle::new(
-                Vector::new(
-                    sb.board_margin_left + i as f32 * sb.cell_with_margin,
-                    sb.board_margin_top + j as f32 * sb.cell_with_margin,
-                ),
-                Vector::new(sb.cell_size, sb.cell_size),
+fn make_peg(
+    sb: &ScreenBoard,
+    i: u32,
+    j: u32,
+    color_rect: Color,
+    color_circle: Color,
+    g: &mut Graphics,
+) {
+    g.fill_rect(
+        &Rectangle::new(
+            Vector::new(
+                sb.board_margin_left + i as f32 * sb.cell_with_margin,
+                sb.board_margin_top + j as f32 * sb.cell_with_margin,
             ),
-            Color::BLUE,
-        );
-        g.fill_circle(
-            &Circle::new(
-                Vector::new(
-                    sb.board_margin_left
-                        + i as f32 * sb.cell_with_margin
-                        + sb.hole_size
-                        + sb.d_cell_hole_size,
-                    sb.board_margin_top
-                        + j as f32 * sb.cell_with_margin
-                        + sb.hole_size
-                        + sb.d_cell_hole_size,
-                ),
-                sb.hole_size,
+            Vector::new(sb.cell_size, sb.cell_size),
+        ),
+        color_rect,
+    );
+    g.fill_circle(
+        &Circle::new(
+            Vector::new(
+                sb.board_margin_left
+                    + i as f32 * sb.cell_with_margin
+                    + sb.peg_size
+                    + sb.d_cell_peg_size,
+                sb.board_margin_top
+                    + j as f32 * sb.cell_with_margin
+                    + sb.peg_size
+                    + sb.d_cell_peg_size,
             ),
-            Color::INDIGO,
-        );
-    };
-    let mut selected_src: Option<(u32, u32)> = None;
-    let mut selected_dest: Option<(u32, u32)> = None;
+            sb.peg_size,
+        ),
+        color_circle,
+    );
+}
+
+fn make_hole(sb: &ScreenBoard, i: u32, j: u32, g: &mut Graphics) {
+    g.fill_rect(
+        &Rectangle::new(
+            Vector::new(
+                sb.board_margin_left + i as f32 * sb.cell_with_margin,
+                sb.board_margin_top + j as f32 * sb.cell_with_margin,
+            ),
+            Vector::new(sb.cell_size, sb.cell_size),
+        ),
+        Color::BLUE,
+    );
+    g.fill_circle(
+        &Circle::new(
+            Vector::new(
+                sb.board_margin_left
+                    + i as f32 * sb.cell_with_margin
+                    + sb.hole_size
+                    + sb.d_cell_hole_size,
+                sb.board_margin_top
+                    + j as f32 * sb.cell_with_margin
+                    + sb.hole_size
+                    + sb.d_cell_hole_size,
+            ),
+            sb.hole_size,
+        ),
+        Color::INDIGO,
+    );
+}
+
+async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver::Result<()> {
+    let bg_color = Color::from_rgba(128, 128, 128, 1.);
 
     let ttf = VectorFont::load("font.ttf").await?;
     let mut font_title = ttf.to_renderer(&gfx, 56.0)?;
     let mut font_menu = ttf.to_renderer(&gfx, 28.0)?;
     let mut font_other = ttf.to_renderer(&gfx, 16.0)?;
+
+    let mut screenboard: Option<ScreenBoard> = None;
+    let mut selected_src: Option<(u32, u32)> = None;
+    let mut selected_dest: Option<(u32, u32)> = None;
+
     loop {
         gfx.clear(bg_color);
         font_title.draw(
@@ -162,55 +180,61 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
 
         if screenboard.is_none() {
             // Display a menu to let the user select its board
+            let rect_pos_dim = vec![
+                (210., 230., 160., 40.),
+                (210., 280., 160., 40.),
+                (210., 330., 160., 40.),
+                (210., 380., 160., 40.),
+            ];
             font_menu.draw(
                 &mut gfx,
                 "Board selection:",
                 Color::BLACK,
                 Vector::new(190.0, 200.0),
             )?;
-            gfx.fill_rect(
-                &Rectangle::new(Vector::new(210., 230.), Vector::new(160., 40.)),
-                Color::WHITE,
-            );
+            for pos_dim in &rect_pos_dim {
+                gfx.fill_rect(
+                    &Rectangle::new(
+                        Vector::new(pos_dim.0, pos_dim.1),
+                        Vector::new(pos_dim.2, pos_dim.3),
+                    ),
+                    Color::WHITE,
+                );
+            }
             font_other.draw(
                 &mut gfx,
                 &format!("English Board"),
                 Color::BLACK,
                 Vector::new(230., 255.),
             )?;
-            gfx.fill_rect(
-                &Rectangle::new(Vector::new(210., 280.), Vector::new(160., 40.)),
-                Color::WHITE,
-            );
             font_other.draw(
                 &mut gfx,
                 &format!("European Board"),
                 Color::BLACK,
                 Vector::new(230., 305.),
             )?;
-            gfx.fill_rect(
-                &Rectangle::new(Vector::new(210., 330.), Vector::new(160., 40.)),
-                Color::WHITE,
-            );
             font_other.draw(
                 &mut gfx,
                 &format!("Asymetric Board"),
                 Color::BLACK,
                 Vector::new(230., 355.),
             )?;
-            gfx.fill_rect(
-                &Rectangle::new(Vector::new(210., 380.), Vector::new(160., 40.)),
-                Color::WHITE,
-            );
             font_other.draw(
                 &mut gfx,
                 &format!("Wiegleb Board"),
                 Color::BLACK,
                 Vector::new(230., 405.),
             )?;
-
             while let Some(ev) = input.next_event().await {
                 match ev {
+                    Event::PointerMoved(_) => {
+                        let position = gfx.screen_to_camera(&window, input.mouse().location());
+                        window.set_cursor_icon(if is_in_rect(position, &rect_pos_dim) {
+                            Some(quicksilver::blinds::CursorIcon::Grabbing)
+                        } else {
+                            Some(quicksilver::blinds::CursorIcon::Default)
+                        });
+                    }
                     Event::PointerInput(p_ev) => {
                         // Left click : select a peg or select the destination of the previously selected_src peg
                         if p_ev.button() == quicksilver::blinds::MouseButton::Left && p_ev.is_down()
@@ -263,12 +287,14 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
             let mut sb = screenboard.take().unwrap();
             let n_peg_left = sb.board.count_peg();
             let mut restart = false;
+
             font_other.draw(
                 &mut gfx,
                 &format!("Press [R] to restart."),
                 Color::BLACK,
                 Vector::new(240., 585.),
             )?;
+            window.set_cursor_icon(Some(quicksilver::blinds::CursorIcon::Default));
 
             if n_peg_left > 1 {
                 font_other.draw(
@@ -280,6 +306,7 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
                         sb.board_margin_top + sb.board_size.1 + 20.,
                     ),
                 )?;
+
                 while let Some(ev) = input.next_event().await {
                     match ev {
                         Event::KeyboardInput(k_ev) => {
@@ -327,6 +354,8 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
                         _ => {}
                     }
                 }
+
+                // Draw the current state of the board
                 for i in 0..sb.board.width() {
                     for j in 0..sb.board.height() {
                         let cell = sb.board.get_cell(i, j);
@@ -342,16 +371,17 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
                     }
                 }
 
+                // Toggle the color of the selected source and/or destination peg(s) if any
                 if let Some((i, j)) = selected_src {
                     make_peg(&sb, i, j, Color::BLUE, Color::RED, &mut gfx);
                     let mouse = gfx.screen_to_camera(&window, input.mouse().location());
                     gfx.fill_circle(&Circle::new(mouse, 12.0), Color::RED);
                 }
-
                 if let Some((i, j)) = selected_dest {
                     make_peg(&sb, i, j, Color::RED, Color::BLUE, &mut gfx);
                 }
 
+                // Do the move requested by the user
                 if let Some(dest_coords) = selected_dest {
                     if let Some(src_coords) = selected_src {
                         sb.board.make_move(src_coords, dest_coords);
@@ -378,8 +408,7 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
                 while let Some(ev) = input.next_event().await {
                     match ev {
                         Event::KeyboardInput(k_ev) => {
-                            let key_pressed = k_ev.key();
-                            if key_pressed == quicksilver::blinds::event::Key::R {
+                            if k_ev.key() == quicksilver::blinds::event::Key::R {
                                 restart = true;
                             }
                         }
@@ -403,7 +432,6 @@ fn main() {
         Settings {
             title: "Peg Solitaire",
             size: Vector::new(600., 600.),
-            // resizable: true,
             ..Settings::default()
         },
         app,
