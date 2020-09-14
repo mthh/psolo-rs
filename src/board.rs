@@ -3,9 +3,9 @@ use core::str::FromStr;
 
 #[derive(Debug)]
 pub(crate) struct Board {
-    pub width: u32,
-    pub height: u32,
-    pub cells: Vec<Cell>,
+    width: u32,
+    height: u32,
+    cells: Vec<Cell>,
 }
 
 impl Board {
@@ -21,7 +21,7 @@ impl Board {
                 return Err(());
             }
             for char in part.chars() {
-                cells.push(Cell::from_str(&char.to_string()).unwrap());
+                cells.push(Cell::from_str(&char.to_string())?);
             }
         }
         Ok(Board {

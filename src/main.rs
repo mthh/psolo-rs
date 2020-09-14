@@ -147,7 +147,6 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
     let mut selected_src: Option<(u32, u32)> = None;
     let mut selected_dest: Option<(u32, u32)> = None;
 
-
     let ttf = VectorFont::load("font.ttf").await?;
     let mut font_title = ttf.to_renderer(&gfx, 56.0)?;
     let mut font_menu = ttf.to_renderer(&gfx, 28.0)?;
@@ -160,141 +159,9 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
             Color::BLACK,
             Vector::new(20., 50.),
         )?;
-        if screenboard.is_some() {
-            let mut sb = screenboard.take().unwrap();
-            let n_peg_left = sb.board.count_peg();
-            let mut restart = false;
-            if n_peg_left > 1 {
-                font_other.draw(
-                    &mut gfx,
-                    &format!("{} pieces left", n_peg_left),
-                    Color::BLACK,
-                    Vector::new(
-                        sb.board_margin_left + sb.board_size.0 - 100.,
-                        sb.board_margin_top + sb.board_size.1 + 20.,
-                    ),
-                )?;
-                font_other.draw(
-                    &mut gfx,
-                    &format!("Press [R] to restart."),
-                    Color::BLACK,
-                    Vector::new(240., 585.),
-                )?;
 
-                while let Some(ev) = input.next_event().await {
-                    match ev {
-                        Event::KeyboardInput(k_ev) => {
-                            let key_pressed = k_ev.key();
-                            if key_pressed == quicksilver::blinds::event::Key::R {
-                                restart = true;
-                            }
-                        },
-                        Event::PointerInput(p_ev) => {
-                            // Left click : select a peg or select the destination of the previously selected_src peg
-                            if p_ev.button() == quicksilver::blinds::MouseButton::Left
-                                && p_ev.is_down()
-                            {
-                                let position =
-                                    gfx.screen_to_camera(&window, input.mouse().location());
-
-                                if let Some((i_clicked, j_clicked)) =
-                                    sb.get_row_col_cell_clicked(position)
-                                {
-                                    let cell_clicked = sb.board.get_cell(i_clicked, j_clicked);
-                                    if cell_clicked == Cell::Peg {
-                                        // User was clicking to select a source peg
-                                        selected_src = Some((i_clicked, j_clicked));
-                                    } else if selected_src.is_some()
-                                        && sb.board.is_valid_move(
-                                            selected_src.unwrap(),
-                                            (i_clicked, j_clicked),
-                                        )
-                                    {
-                                        // User was clicking to select a destination peg and the move was valid
-                                        selected_dest = Some((i_clicked, j_clicked));
-                                    }
-                                } else {
-                                    // User clicked outside of the board
-                                    selected_src = None;
-                                }
-
-                            // Right click : deselect the current selected_src peg if any
-                            } else if p_ev.button() == quicksilver::blinds::MouseButton::Right
-                                && p_ev.is_down()
-                            {
-                                selected_src = None;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                for i in 0..sb.board.width() {
-                    for j in 0..sb.board.height() {
-                        let cell = sb.board.get_cell(i, j);
-                        match cell {
-                            Cell::Peg => {
-                                make_peg(&sb, i, j, Color::BLUE, Color::YELLOW, &mut gfx);
-                            }
-                            Cell::Hole => {
-                                make_hole(&sb, i, j, &mut gfx);
-                            }
-                            _ => {} // _ => {
-                                    //     gfx.fill_rect(
-                                    //         &Rectangle::new(
-                                    //             Vector::new(
-                                    //                 board_margin_left + i as f32 * cell_with_margin,
-                                    //                 board_margin_top + j as f32 * cell_with_margin,
-                                    //             ),
-                                    //             Vector::new(cell_size, cell_size),
-                                    //         ),
-                                    //         Color::BLACK,
-                                    //     );
-                                    // }
-                        };
-                    }
-                }
-
-                if let Some((i, j)) = selected_src {
-                    make_peg(&sb, i, j, Color::BLUE, Color::RED, &mut gfx);
-                    let mouse = gfx.screen_to_camera(&window, input.mouse().location());
-                    gfx.fill_circle(&Circle::new(mouse, 12.0), Color::RED);
-                }
-
-                if let Some((i, j)) = selected_dest {
-                    make_peg(&sb, i, j, Color::RED, Color::BLUE, &mut gfx);
-                }
-
-                if let Some(dest_coords) = selected_dest {
-                    if let Some(src_coords) = selected_src {
-                        sb.board.make_move(src_coords, dest_coords);
-                        selected_src = None;
-                        selected_dest = None;
-                    }
-                }
-
-                if !sb.board.has_valid_move_left() {
-                    font_other.draw(
-                        &mut gfx,
-                        &format!("No valid move left !"),
-                        Color::RED,
-                        Vector::new(240., 565.),
-                    )?;
-                }
-            } else {
-                font_title.draw(
-                    &mut gfx,
-                    "YOU WIN !!",
-                    Color::RED,
-                    Vector::new(200.0, 200.0),
-                )?;
-            }
-            if !restart {
-                screenboard = Some(sb);
-            } else {
-                selected_src = None;
-                selected_dest = None;
-            }
-        } else {
+        if screenboard.is_none() {
+            // Display a menu to let the user select its board
             font_menu.draw(
                 &mut gfx,
                 "Board selection:",
@@ -390,6 +257,141 @@ async fn app(window: Window, mut gfx: Graphics, mut input: Input) -> quicksilver
                     }
                     _ => {}
                 }
+            }
+        } else {
+            // Logic for when the board has already been selected
+            let mut sb = screenboard.take().unwrap();
+            let n_peg_left = sb.board.count_peg();
+            let mut restart = false;
+            font_other.draw(
+                &mut gfx,
+                &format!("Press [R] to restart."),
+                Color::BLACK,
+                Vector::new(240., 585.),
+            )?;
+
+            if n_peg_left > 1 {
+                font_other.draw(
+                    &mut gfx,
+                    &format!("{} pieces left", n_peg_left),
+                    Color::BLACK,
+                    Vector::new(
+                        sb.board_margin_left + sb.board_size.0 - 100.,
+                        sb.board_margin_top + sb.board_size.1 + 20.,
+                    ),
+                )?;
+                while let Some(ev) = input.next_event().await {
+                    match ev {
+                        Event::KeyboardInput(k_ev) => {
+                            let key_pressed = k_ev.key();
+                            if key_pressed == quicksilver::blinds::event::Key::R {
+                                restart = true;
+                            }
+                        }
+                        Event::PointerInput(p_ev) => {
+                            // Left click : select a peg or select the destination of the previously selected_src peg
+                            if p_ev.button() == quicksilver::blinds::MouseButton::Left
+                                && p_ev.is_down()
+                            {
+                                let position =
+                                    gfx.screen_to_camera(&window, input.mouse().location());
+
+                                if let Some((i_clicked, j_clicked)) =
+                                    sb.get_row_col_cell_clicked(position)
+                                {
+                                    let cell_clicked = sb.board.get_cell(i_clicked, j_clicked);
+                                    if cell_clicked == Cell::Peg {
+                                        // User was clicking to select a source peg
+                                        selected_src = Some((i_clicked, j_clicked));
+                                    } else if selected_src.is_some()
+                                        && sb.board.is_valid_move(
+                                            selected_src.unwrap(),
+                                            (i_clicked, j_clicked),
+                                        )
+                                    {
+                                        // User was clicking to select a destination peg and the move was valid
+                                        selected_dest = Some((i_clicked, j_clicked));
+                                    }
+                                } else {
+                                    // User clicked outside of the board
+                                    selected_src = None;
+                                }
+
+                            // Right click : deselect the current selected_src peg if any
+                            } else if p_ev.button() == quicksilver::blinds::MouseButton::Right
+                                && p_ev.is_down()
+                            {
+                                selected_src = None;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                for i in 0..sb.board.width() {
+                    for j in 0..sb.board.height() {
+                        let cell = sb.board.get_cell(i, j);
+                        match cell {
+                            Cell::Peg => {
+                                make_peg(&sb, i, j, Color::BLUE, Color::YELLOW, &mut gfx);
+                            }
+                            Cell::Hole => {
+                                make_hole(&sb, i, j, &mut gfx);
+                            }
+                            _ => {}
+                        };
+                    }
+                }
+
+                if let Some((i, j)) = selected_src {
+                    make_peg(&sb, i, j, Color::BLUE, Color::RED, &mut gfx);
+                    let mouse = gfx.screen_to_camera(&window, input.mouse().location());
+                    gfx.fill_circle(&Circle::new(mouse, 12.0), Color::RED);
+                }
+
+                if let Some((i, j)) = selected_dest {
+                    make_peg(&sb, i, j, Color::RED, Color::BLUE, &mut gfx);
+                }
+
+                if let Some(dest_coords) = selected_dest {
+                    if let Some(src_coords) = selected_src {
+                        sb.board.make_move(src_coords, dest_coords);
+                        selected_src = None;
+                        selected_dest = None;
+                    }
+                }
+
+                if !sb.board.has_valid_move_left() {
+                    font_other.draw(
+                        &mut gfx,
+                        &format!("No valid move left !"),
+                        Color::RED,
+                        Vector::new(240., 565.),
+                    )?;
+                }
+            } else {
+                font_title.draw(
+                    &mut gfx,
+                    "YOU WIN !!",
+                    Color::RED,
+                    Vector::new(200.0, 200.0),
+                )?;
+                while let Some(ev) = input.next_event().await {
+                    match ev {
+                        Event::KeyboardInput(k_ev) => {
+                            let key_pressed = k_ev.key();
+                            if key_pressed == quicksilver::blinds::event::Key::R {
+                                restart = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if !restart {
+                screenboard = Some(sb);
+            } else {
+                selected_src = None;
+                selected_dest = None;
             }
         }
         gfx.present(&window)?;
